@@ -1,0 +1,38 @@
+{
+  "summary": "Backend: 17/17 pytest pass (auth register/login/me 401s, ads reward +0.04 & 429 after 30, premium toggle 30<->75 incl. 31st ad allowed as premium, cashout <$5 -> 400 'Minimum cashout is $5.00.' with balance unchanged, invalid email 422, transactions {items,page,has_more} + page=0 422). Frontend (375x667 web preview): legal screen (Continue disabled until checkbox, Privacy/Terms tabs switch, accept -> login, reload skips legal), register + login, wrong-password error, dashboard (balance card, Free Tier badge, Watch Ad & Earn, Ads Today 0/30), ad overlay 5s countdown -> Claim Reward -> $0.04 / 1 of 30 + success toast, double-tap claim only credits once, premium toggle -> 'Premium Member', upgrade hidden, cap 75, theme toggle light<->dark persisted across reload, Cashout tab (balance, PayPal input with gold focus underline, Request Payout disabled with balance <$5 and no /api/cashout request fired, empty history state, Prev/Next disabled, history fetched only on Cashout focus and re-fetched on refocus), VPN block screen (mocked ipapi is_vpn=true) + Retry, logout. No successful payout was triggered; no DB balances modified. No deprecated Expo packages found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/ads/reward", "issue": "No server-side pacing: a client can call it 30 times in ~2s (done in tests). This matters because money is real (LIVE PayPal). Suggest enforcing at least ~5s between rewards per user (store last_ad_at)."},
+      {"endpoint": "POST /api/premium/toggle", "issue": "If a premium user who watched more than 30 ads switches back to free, ads_today goes over the cap and the UI shows e.g. 'Ads Today: 31 / 30'. Cosmetic only."},
+      {"endpoint": "POST /api/cashout", "issue": "A 201 from PayPal only means the batch was accepted. The item can still end up DENIED, UNCLAIMED or RETURNED later, and nothing checks the final status, so the $5 stays deducted even if the payout fails. Suggest a webhook or GET /v1/payments/payouts/{id} check."},
+      {"endpoint": "auth current_user", "issue": "ObjectId(uid) is not wrapped in try/except, so a validly signed token with a malformed sub would return a 500. Low risk."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard / Cashout", "issues": ["The success/error toast covers the header (LUXE logo and theme toggle button) for its whole duration, so the theme toggle can't be tapped while it shows. Consider placing the toast below the header or at the bottom."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_luxe_api.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "(Minor) Move the toast so it doesn't cover the header theme toggle.",
+    "(Minor) Add server-side spacing between /api/ads/reward calls to stop scripted reward farming.",
+    "(Minor) Cap the displayed ads_today at ads_cap, or handle the premium->free downgrade case.",
+    "(Recommended, real money) Check the final PayPal payout item status (webhook or polling) and refund if it is DENIED or RETURNED."
+  ],
+  "critical_code_review_comments": [
+    "@app.on_event is deprecated in FastAPI; use the lifespan handler instead (non-blocking).",
+    "No rate limiting on /api/auth/login, so brute force is possible."
+  ],
+  "updated_files": ["/app/backend/tests/test_luxe_api.py (new)"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Test users test_<hex>@example.com and test_ui_*@example.com were created via register. Each has a balance of $1.24 or less. Nothing was deleted.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run the backend tests with: EXPO_PUBLIC_BACKEND_URL=<frontend/.env> pytest backend/tests/test_luxe_api.py -n 0. The tests depend on running in order; backend/pytest.ini enables xdist, so pass -n 0. PayPal is LIVE. The OAuth token call to api-m.paypal.com returns 200 (credentials valid). NEVER trigger a successful cashout. The demo user has 2 old failed transactions ('Payouts are not configured yet.' and 'PayPal authentication failed.') from earlier main-agent testing. The VPN block can be tested by routing **/api.ipapi.is/** to {is_vpn:true}.",
+  "rca_of_issue": "The 'PayPal authentication failed' (401) row in the demo history came from an earlier attempt. A token-only check now returns 200 on live, so the current credentials are valid."
+}

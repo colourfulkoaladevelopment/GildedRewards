@@ -1,0 +1,177 @@
+{
+  "app_name": "Rewards Luxe",
+  "personality": "6 Glass / Luxe",
+  "personality_one_liner": "A high-end, cinematic earning experience where pure minimalist contrast and exquisite gold accents turn micro-transactions into private banking.",
+  "color": {
+    "surface": "#000000",
+    "onSurface": "#FDFBF7",
+    "surfaceSecondary": "#121212",
+    "onSurfaceSecondary": "#FDFBF7",
+    "surfaceTertiary": "#1C1C1C",
+    "onSurfaceTertiary": "#FFFFFF",
+    "surfaceInverse": "#FFFFF0",
+    "onSurfaceInverse": "#121212",
+    "brand": "#D4AF37",
+    "onBrand": "#000000",
+    "brandPrimary": "#D4AF37",
+    "onBrandPrimary": "#000000",
+    "brandSecondary": "#C9A86A",
+    "onBrandSecondary": "#000000",
+    "brandTertiary": "#4A3E14",
+    "onBrandTertiary": "#FDFBF7",
+    "success": "#2E4E36",
+    "onSuccess": "#E6F4EA",
+    "warning": "#8F6B1E",
+    "onWarning": "#FDFBF7",
+    "error": "#5C1D1D",
+    "onError": "#FBEAEB",
+    "info": "#2B3A4F",
+    "onInfo": "#E8F0FE",
+    "border": "#332A0D",
+    "borderStrong": "#D4AF37",
+    "divider": "#1A1A1A",
+    "muted": "#8A8A8A"
+  },
+  "typography": {
+    "displayFontFamily": "Georgia, serif",
+    "textFontFamily": "System",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24,
+      "3xl": 48
+    }
+  },
+  "spacing": {
+    "rule": "Generous, cinematic spacing. Elements should breathe, highlighting the high-end nature of the app. Never cramp cards.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "1",
+  "navigation": "bottom_tabs",
+  "icon_set": "Ionicons",
+  "glassmorphism": {
+    "enabled": "true",
+    "do's": [
+      "Use subtle glass over obsidian/cream backgrounds for bottom tabs and sticky headers.",
+      "Ensure text on glass is fully readable (use tinted translucent base)."
+    ],
+    "dont's": [
+      "Do not overuse blur on cards or standard UI sections; rely on the fine gold borders and deep blacks instead."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Splash / Loading",
+      "purpose": "First impression and system check (VPN/storage).",
+      "states": {
+        "loading": "Centered minimalist geometric gold vector monogram with thin golden ring tracing/pulsing around it.",
+        "empty": "N/A",
+        "error": "N/A"
+      },
+      "layout": "Full screen pure black/ivory background. Center content perfectly. No other chrome."
+    },
+    {
+      "name": "VPN Blockout",
+      "purpose": "Blocks users with active VPNs.",
+      "states": {
+        "loading": "N/A",
+        "empty": "N/A",
+        "error": "Centered warning icon in brand color, bold readable text, retry connection button."
+      },
+      "layout": "Full-screen modal, pure surface background. Large typography explaining the access block."
+    },
+    {
+      "name": "Legal Onboarding",
+      "purpose": "First-launch legal modal with Privacy Policy / Terms of Service.",
+      "states": {
+        "loading": "Spinner",
+        "empty": "N/A",
+        "error": "Error fetching legal text."
+      },
+      "layout": "Bottom sheet or full-screen modal. Tabbed interface for Privacy/TOS. Sticky bottom footer with checkbox and 'Accept & Continue' button."
+    },
+    {
+      "name": "Login / Register",
+      "purpose": "Email/password authentication.",
+      "states": {
+        "loading": "Button shows loading state.",
+        "empty": "N/A",
+        "error": "Inline text or toast error."
+      },
+      "layout": "Minimalist single-column form. Inputs have bottom borders only (gold when focused). Primary CTA at the bottom."
+    },
+    {
+      "name": "Main Dashboard",
+      "purpose": "The core earning hub displaying balance and primary ad-watch action.",
+      "states": {
+        "loading": "Skeleton of balance card and button.",
+        "empty": "N/A",
+        "error": "Toast on failed ad load."
+      },
+      "layout": "Header with left text logo (Serif) + right light/dark toggle. Center: Expansive Balance Card (surfaceSecondary) with fine gold border (0.5pt), giant bold balance ($0.00), and a pill badge [Free Tier]. Below: Tactile 'Watch Ad & Earn' button (large, pill, brandPrimary). Below button: Micro-text 'Ads Today: 12 / 30' (muted). Bottom: 'Upgrade to Premium ($5/mo)' ghost CTA."
+    },
+    {
+      "name": "Simulated Ad Overlay",
+      "purpose": "Plays the rewarded ad experience.",
+      "states": {
+        "loading": "Loading video...",
+        "empty": "N/A",
+        "error": "Failed to load ad."
+      },
+      "layout": "Full-screen absolute overlay. Dark scrim. Center countdown timer (large text) with a simulated brand visual. Dismiss button appears after countdown."
+    },
+    {
+      "name": "Cashout & History",
+      "purpose": "Handles payouts and lists past transactions.",
+      "states": {
+        "loading": "Skeleton rows for history.",
+        "empty": "Illustration or monogram with 'No payouts yet' text.",
+        "error": "Failed to load history."
+      },
+      "layout": "Top section: Current balance. Middle: Gold-underlined 'PayPal Email Address' input. 'Request Payout' button (disabled if <$5.00). Bottom section: Paginated list (10 rows) of payout history. Clean rows, minimal dividers."
+    }
+  ],
+  "images": {
+    "splash_monogram": {
+      "url": "https://images.unsplash.com/photo-1659738943702-a22ddb8f87f1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjV8MHwxfHNlYXJjaHwzfHxtaW5pbWFsaXN0JTIwZ2VvbWV0cmljJTIwZ29sZCUyMHZlY3RvciUyMG1vbm9ncmFtJTIwYmxhY2slMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc5MzE0NDQyNXww&ixlib=rb-4.1.0&q=85",
+      "dark": "https://images.unsplash.com/photo-1659738943702-a22ddb8f87f1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjV8MHwxfHNlYXJjaHwzfHxtaW5pbWFsaXN0JTIwZ2VvbWV0cmljJTIwZ29sZCUyMHZlY3RvciUyMG1vbm9ncmFtJTIwYmxhY2slMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc5MzE0NDQyNXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Gold minimalist geometric monogram on dark background"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Implement a strict Light/Dark mode toggle driven by user input or system preferences, adhering to the Soft Ivory (#FFFFF0)/Cream (#FDFBF7) and Jet Black (#000000)/Obsidian (#121212) palettes. The gold accent (#D4AF37) is identical in both modes.",
+    "The typography must rely strictly on Expo-compatible standard/system fonts or local TTFs. Do not use @expo-google-fonts. Use 'Georgia' or 'serif' for display elements (Balance, Logos) and 'System' or 'sans-serif' for standard labels.",
+    "For the Splash Screen, implement a Reanimated component featuring a glowing/pulsing gold ring to simulate the trace animation, acting as the foreground while VPN check / storage reads happen behind the scenes.",
+    "The Dashboard balance card must have a fine gold border (StyleSheet.hairlineWidth or 1pt max) and the balance text must be expansive (use the 3xl or 48pt equivalent font size).",
+    "On the Cashout tab, the PayPal email input must feature a bottom border only ('gold-underlined') – do not wrap it in a fully bordered box.",
+    "Ensure 'Request Payout' button logic is disabled strictly when balance is < $5.00, enforcing opacity drop when disabled.",
+    "Use tactile Haptic feedback on the 'Watch Ad & Earn', theme toggle, and Cashout buttons. Scale the button down to 0.97 on press.",
+    "From Web Research: Luxury finance UI requires high visual space, zero clutter, and strong contrast. Let the Jet Black / Soft Ivory backgrounds bleed edge-to-edge. Use subtle shadows or glass only when absolutely necessary (e.g. for sticky headers or bottom tabs)."
+  ]
+}
