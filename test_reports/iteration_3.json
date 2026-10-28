@@ -1,0 +1,32 @@
+{
+  "summary": "Iteration 3 frontend-only retest of RevenueCat purchase flow (mobile 375x667, web preview). identityReady fix VERIFIED: new user -> /premium shows no 'Linking your account…', Subscribe enabled. Subscribe -> premium-confirm-modal -> Confirm -> purchases-js 'Test Store Purchase' dialog (Product: Pro monthly / pro.monthly, Price $9.99) -> 'Test valid purchase' -> success toast + router.back to dashboard. FOUND BUG: dashboard still showed 'Free Tier', 'Ads Today: 0 / 30', upgrade button visible right after purchase even though RevenueCat server had entitlement 'pro' active (verified via GET /v1/subscribers/{id}); only re-login showed Premium. RCA: purchaseMutation never wrote returned customerInfo into react-query cache and addCustomerInfoUpdateListener does not fire on web (purchases-js). Testing agent FIXED it (onSuccess setQueryData for purchase + restore) and re-verified with a fresh user: 'Premium Member' badge, 'Ads Today: 0 / 75', upgrade hidden, 'Manage Premium' visible, /premium shows premium-active. Price is STILL $9.99 (not $5.00) on premium screen, subscribe button and RC Test Store dialog. Minor fixes verified: watch button 'Ads in Android App Only' single line centered; admin ad overlay bg rgb(0,0,0) opaque; classic web tabs (tab-earn/tab-cashout) render and navigate. No deprecated packages detected (expo-router/native-tabs now used).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "RevenueCat purchase -> dashboard premium state", "issue": "FIXED by testing agent: after successful Test Store purchase UI stayed Free Tier (stale customer-info cache; listener not firing on web). Now setQueryData on purchase/restore success.", "affected_testIDs": ["tier-badge", "ads-today-text", "upgrade-premium-button", "manage-premium-link"]},
+      {"flow": "RevenueCat price", "issue": "Offering package pro.monthly still priced $9.99 in RevenueCat Test Store (premium-price '$9.99 / month', 'Subscribe · $9.99/mo', RC dialog Price $9.99, subscriber record price.amount 9.99). Dashboard button and copy say '$5/mo' -> mismatch. Re-upsert did not take effect; fix price in RevenueCat dashboard for the Test Store product.", "affected_testIDs": ["premium-price", "premium-subscribe-button", "upgrade-premium-button"]}
+    ],
+    "design_issues": [
+      {"screen": "premium confirm modal", "issues": ["Scrim uses c.scrim (#000000, fully opaque) so the confirm bottom sheet sits over a solid black screen instead of a dimmed premium screen; use a semi-transparent scrim for the sheet (keep opaque only for AdOverlay)."]},
+      {"screen": "dashboard / premium toast", "issues": ["Success toast overlaps top of balance card label and the Monogram on premium screen for several seconds (minor)."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_3.json"],
+  "action_items": [
+    "Update RevenueCat Test Store product pro.monthly price to $5.00 (still $9.99) or align '$5/mo' copy on dashboard upgrade button.",
+    "Keep the testing-agent fix in src/revenuecat.tsx (purchase/restore onSuccess -> queryClient.setQueryData customer-info).",
+    "Optional: semi-transparent scrim for premium confirm modal."
+  ],
+  "critical_code_review_comments": [
+    "src/revenuecat.tsx: relying solely on addCustomerInfoUpdateListener for post-purchase state is unreliable on web; now synced from mutation result.",
+    "Test Store sandbox monthly subscription expires in ~5 minutes (RC sandbox), so Premium state reverts quickly in preview - expected."
+  ],
+  "updated_files": ["/app/frontend/src/revenuecat.tsx"],
+  "success_rate": {"backend": "skipped (not requested)", "frontend": "95% (all requested flows pass after fix; price still $9.99)"},
+  "seed_data_creation": "Registered users test_rc_1793147068@luxe.app and test_rc2_1793147191@luxe.app (password TestPass2026!) with RC Test Store sandbox purchases. Admin balance untouched ($0.16, 4 ads today) - overlay closed without claiming.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "PayPal LIVE: keep balances < $5. Visiting /login directly bypasses the boot legal gate; reload of '/' shows legal modal (expected boot flow). RC Test Store dialog buttons: 'Test valid purchase' / 'Test failed purchase' / 'Cancel' (rendered in-page). Verify RC entitlements with GET https://api.revenuecat.com/v1/subscribers/{user_id} using the public test key + X-Platform: web."
+}

@@ -14,6 +14,15 @@ import logging
 import bcrypt
 import jwt
 import httpx
+import time
+import base64
+import binascii
+from urllib.parse import parse_qs
+from fastapi import Request
+from pymongo.errors import DuplicateKeyError
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.exceptions import InvalidSignature
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -112,11 +121,11 @@ def cap_for(tier: str) -> int:
 
 
 def public_user(u: User) -> dict:
-    ads_today = min(u.ads_today if u.ads_date == today() else 0, cap_for(u.tier))
+    ads_today = min(u.ads_today if u.ads_date == today() else 0, CAP_PREMIUM)
     return {
         "id": u.id, "email": u.email, "role": u.role,
         "balance": round(u.balance, 4), "paypal_email": u.paypal_email,
-        "tier": u.tier, "ads_today": ads_today, "ads_cap": cap_for(u.tier),
+        "ads_today": ads_today, "ads_max": CAP_PREMIUM,
         "min_cashout": MIN_CASHOUT, "ad_payout": AD_PAYOUT,
     }
 
@@ -183,10 +192,12 @@ async def me(user: User = Depends(current_user)):
 # ---------------- Ads ----------------
 @api_router.post("/ads/reward")
 async def ad_reward(user: User = Depends(current_user)):
-    """Single atomic update: resets daily counter if new day, enforces cap, credits 80% share."""
+    """SIMULATED ad reward — admin/test accounts only. Real users are credited via AdMob SSV."""
+    if user.role != "admin":
+        raise HTTPException(403, "Rewards are only granted for verified AdMob ads.")
     d = today()
     user_share = round(AD_PAYOUT * USER_SHARE, 4)
-    cap = cap_for(user.tier)
+    cap = CAP_PREMIUM
     oid = ObjectId(user.id)
     now = datetime.now(timezone.utc)
     gap_ok = {"$or": [{"last_ad_at": None}, {"last_ad_at": {"$lt": (now - timedelta(seconds=AD_MIN_GAP)).isoformat()}}]}
@@ -214,12 +225,111 @@ async def ad_reward(user: User = Depends(current_user)):
     return public_user(User.from_mongo(doc))
 
 
-# ---------------- Premium (demo) ----------------
-@api_router.post("/premium/toggle")
-async def premium_toggle(user: User = Depends(current_user)):
-    new_tier = "free" if user.tier == "premium" else "premium"
-    doc = await db.users.find_one_and_update({"_id": ObjectId(user.id)}, {"$set": {"tier": new_tier}}, return_document=True)
-    return public_user(User.from_mongo(doc))
+# ---------------- AdMob SSV (real ads) ----------------
+ADMOB_KEYS_URL = "https://www.gstatic.com/admob/reward/verifier-keys.json"
+_admob_keys = {"expires": 0.0, "keys": {}}
+
+
+async def admob_key(key_id: str, force: bool = False):
+    now = time.time()
+    if force or now >= _admob_keys["expires"]:
+        async with httpx.AsyncClient(timeout=5) as hc:
+            r = await hc.get(ADMOB_KEYS_URL)
+            r.raise_for_status()
+        _admob_keys["keys"] = {str(k["keyId"]): k["pem"] for k in r.json()["keys"]}
+        _admob_keys["expires"] = now + 23 * 3600
+    pem = _admob_keys["keys"].get(key_id)
+    # refresh on unknown key at most once per minute (keys rotate rarely)
+    if not pem and not force and now - _admob_keys.get("fetched", 0) > 60:
+        _admob_keys["fetched"] = now
+        return await admob_key(key_id, force=True)
+    if not pem:
+        raise ValueError("unknown key_id")
+    return serialization.load_pem_public_key(pem.encode())
+
+
+def split_ssv_query(raw: bytes):
+    q = raw.decode("utf-8")
+    pos = q.rfind("&signature=")
+    if pos < 0:
+        pos = q.find("signature=")
+        if pos != 0:
+            raise ValueError("missing signature")
+        signed, tail = "", q[len("signature="):]
+    else:
+        signed, tail = q[:pos], q[pos + len("&signature="):]
+    if "&key_id=" not in tail:
+        raise ValueError("missing key_id")
+    sig_text, key_id = tail.split("&key_id=", 1)
+    if not sig_text or not key_id or "&" in key_id:
+        raise ValueError("malformed signature")
+    sig = base64.urlsafe_b64decode(sig_text + "=" * (-len(sig_text) % 4))
+    values = {k: v[-1] for k, v in parse_qs(q, keep_blank_values=True).items()}
+    return signed.encode("utf-8"), sig, key_id, values
+
+
+@api_router.post("/ads/session")
+async def ad_session(user: User = Depends(current_user)):
+    """Short-lived signed token passed to AdMob as SSV custom_data."""
+    now = datetime.now(timezone.utc)
+    tok = jwt.encode({"sub": user.id, "purpose": "ad", "jti": uuid.uuid4().hex, "iat": now,
+                      "exp": now + timedelta(minutes=30)}, JWT_SECRET, algorithm=JWT_ALGO)
+    return {"user_id": user.id, "custom_data": tok}
+
+
+@api_router.get("/admob/ssv")
+async def admob_ssv(request: Request):
+    try:
+        message, sig, key_id, p = split_ssv_query(request.scope["query_string"])
+        key = await admob_key(key_id)
+        key.verify(sig, message, ec.ECDSA(hashes.SHA256()))
+    except (ValueError, InvalidSignature, httpx.HTTPError, binascii.Error) as e:
+        logger.warning("Invalid SSV: %s", e)
+        raise HTTPException(400, "invalid SSV")
+
+    uid, custom, txid = p.get("user_id"), p.get("custom_data"), p.get("transaction_id")
+    if not uid or not custom or not txid:
+        # Google's console verification ping: valid signature, no user — acknowledge only.
+        return {"ok": True, "credited": False}
+    unit = os.environ.get("ADMOB_REWARDED_AD_UNIT", "")
+    if p.get("ad_unit") and unit and p["ad_unit"] not in unit:
+        logger.warning("SSV for unexpected ad unit %s", p.get("ad_unit"))
+        return {"ok": True, "credited": False}
+    try:
+        claims = jwt.decode(custom, JWT_SECRET, algorithms=[JWT_ALGO])
+        if claims.get("purpose") != "ad" or claims.get("sub") != uid:
+            raise jwt.InvalidTokenError("mismatch")
+    except jwt.InvalidTokenError:
+        logger.warning("SSV custom_data invalid for %s", uid)
+        return {"ok": True, "credited": False}
+    if not ObjectId.is_valid(uid):
+        return {"ok": True, "credited": False}
+
+    try:
+        await db.admob_rewards.insert_one({"transaction_id": txid, "user_id": uid, "ad_unit": p.get("ad_unit"),
+                                           "timestamp": p.get("timestamp"),
+                                           "received_at": datetime.now(timezone.utc).isoformat()})
+    except DuplicateKeyError:
+        return {"ok": True, "credited": False, "duplicate": True}
+
+    d = today()
+    user_share = round(AD_PAYOUT * USER_SHARE, 4)
+    oid = ObjectId(uid)
+    doc = await db.users.find_one_and_update(
+        {"_id": oid, "ads_date": {"$ne": d}},
+        {"$set": {"ads_date": d, "ads_today": 1, "last_ad_at": datetime.now(timezone.utc).isoformat()},
+         "$inc": {"balance": user_share}})
+    if not doc:
+        doc = await db.users.find_one_and_update(
+            {"_id": oid, "ads_date": d, "ads_today": {"$lt": CAP_PREMIUM}},
+            {"$inc": {"ads_today": 1, "balance": user_share},
+             "$set": {"last_ad_at": datetime.now(timezone.utc).isoformat()}})
+    if not doc:
+        return {"ok": True, "credited": False, "capped": True}
+    await db.company_ledger.update_one(
+        {"date": d}, {"$inc": {"revenue": AD_PAYOUT, "company_share": round(AD_PAYOUT * COMPANY_SHARE, 4), "ads": 1}},
+        upsert=True)
+    return {"ok": True, "credited": True}
 
 
 # ---------------- PayPal Payouts ----------------
@@ -322,6 +432,7 @@ app.add_middleware(
 async def startup():
     await db.users.create_index("email", unique=True)
     await db.transactions.create_index([("user_id", 1), ("created_at", -1)])
+    await db.admob_rewards.create_index("transaction_id", unique=True)
     # Idempotent seeding of admin + demo user
     seeds = [
         (os.environ["ADMIN_EMAIL"], os.environ["ADMIN_PASSWORD"], "admin", 0.0),

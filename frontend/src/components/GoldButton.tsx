@@ -41,7 +41,7 @@ export function GoldButton({ title, onPress, disabled, loading, variant = "solid
         {loading ? (
           <ActivityIndicator color={ghost ? colors.goldText : colors.onBrandPrimary} />
         ) : (
-          <Text style={[styles.text, large && styles.textLarge, ghost ? styles.ghostText : styles.solidText]}>{title}</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.text, large && styles.textLarge, ghost ? styles.ghostText : styles.solidText]}>{title}</Text>
         )}
       </Pressable>
     </Animated.View>
@@ -61,7 +61,7 @@ const useStyles = makeStyles((c) => ({
   },
   ghost: { borderWidth: 1, borderColor: c.borderStrong, backgroundColor: "transparent" },
   disabled: { opacity: 0.35 },
-  text: { fontSize: 15, fontWeight: "700", letterSpacing: 1.2, fontFamily: fonts.text },
+  text: { textAlign: "center", fontSize: 15, fontWeight: "700", letterSpacing: 1.2, fontFamily: fonts.text },
   textLarge: { fontSize: 17 },
   solidText: { color: c.onBrandPrimary },
   ghostText: { color: c.goldText },

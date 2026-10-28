@@ -10,18 +10,27 @@ import { AppProvider } from "@/src/app-context";
 import { ErrorBoundary } from "@/src/components/error-boundary";
 import { ToastProvider } from "@/src/components/Toast";
 import { queryClient } from "@/src/query-client";
+import { initializeRevenueCat, SubscriptionProvider } from "@/src/revenuecat";
 import { useTheme } from "@/src/theme";
 
 // Disable logbox errors etc so that users can see the app
 // and agent works as expected.
 LogBox.ignoreAllLogs(true);
 
+try {
+  initializeRevenueCat();
+} catch (err) {
+  console.warn("RevenueCat unavailable:", err);
+}
+
 function ThemedStack() {
   const { scheme, colors } = useTheme();
   return (
     <>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }} />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }}>
+        <Stack.Screen name="premium" options={{ presentation: "modal" }} />
+      </Stack>
     </>
   );
 }
@@ -34,9 +43,11 @@ export default function RootLayout() {
           <QueryClientProvider client={queryClient}>
             <KeyboardProvider>
               <AppProvider>
-                <ToastProvider>
-                  <ThemedStack />
-                </ToastProvider>
+                <SubscriptionProvider>
+                  <ToastProvider>
+                    <ThemedStack />
+                  </ToastProvider>
+                </SubscriptionProvider>
               </AppProvider>
             </KeyboardProvider>
           </QueryClientProvider>

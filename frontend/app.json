@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "frontend",
+    "name": "LUXE",
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -39,7 +39,15 @@
       "expo-secure-store",
       "expo-web-browser",
       "expo-status-bar",
-      "@react-native-vector-icons/ionicons"
+      "@react-native-vector-icons/ionicons",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-5648720019902247~9249327645",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511",
+          "delayAppMeasurementInit": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

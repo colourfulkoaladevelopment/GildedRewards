@@ -12,6 +12,7 @@ Simulated ads (AdMob later) · PayPal LIVE keys (user confirmed real money) · D
 - Frontend Expo Router: index (boot splash + VPN check via api.ipapi.is), legal, login, (tabs)/index (Earn), (tabs)/cashout. Theme override store in src/theme.ts, local storage for token/legal/theme/user cache.
 
 ## Implemented (2026-06)
+- Iteration 2: Real AdMob rewarded ads (react-native-google-mobile-ads, app ID ca-app-pub-5648720019902247~9249327645, unit /8975537467) with Google SSV callback GET /api/admob/ssv (ECDSA verify, signed custom_data session, idempotent transaction_id). Simulated ads now admin-only (preview testing). RevenueCat $5/mo Premium (entitlement `pro`, paywall /premium, restore, Test Store in preview); demo toggle removed; 30/75 cap client-side from entitlement.
 - All screens + flows above; tested by testing agent (17/17 backend, all frontend flows pass).
 - Fixes after test: toast no longer blocks header, 5s gap between rewards, ads counter clamped, malformed token → 401.
 

@@ -1,10 +1,12 @@
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useRewardedAd } from "@/src/ads/useRewardedAd";
 import { api, User } from "@/src/api";
+import { useSubscription } from "@/src/revenuecat";
 import { useApp } from "@/src/app-context";
 import { AdOverlay } from "@/src/components/AdOverlay";
 import { GoldButton } from "@/src/components/GoldButton";
@@ -14,22 +16,67 @@ import { splitRevenue } from "@/src/constants";
 import { usesNativeTabs } from "@/src/navigation";
 import { fonts, makeStyles } from "@/src/theme";
 
+const CAP_FREE = 30;
+const CAP_PREMIUM = 75;
+
 export default function Dashboard() {
   const { user, setUser, signOut } = useApp();
+  const { isSubscribed } = useSubscription();
   const [adOpen, setAdOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [upgrading, setUpgrading] = useState(false);
   const toast = useToast();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const styles = useStyles();
   const bottomChrome = usesNativeTabs ? insets.bottom : 0;
+  const userRef = useRef(user);
+  userRef.current = user;
+
+  // Reconcile with the server once SSV has had time to land (no polling loop).
+  const reconcile = useCallback(
+    async (expected: number, retry = true) => {
+      try {
+        const fresh = await api<User>("/me");
+        if (fresh.ads_today < expected && retry) {
+          setTimeout(() => reconcile(expected, false), 6000);
+          return;
+        }
+        setUser(fresh);
+      } catch {
+        // keep optimistic value until next boot
+      } finally {
+        setSyncing(false);
+      }
+    },
+    [setUser],
+  );
+
+  const realAd = useRewardedAd({
+    enabled: !!user,
+    onEarned: () => {
+      const u = userRef.current;
+      if (!u) return;
+      const { userShare } = splitRevenue(u.ad_payout);
+      setUser({ ...u, balance: u.balance + userShare, ads_today: u.ads_today + 1 });
+      toast("success", `+$${userShare.toFixed(2)} — verifying with Google…`);
+    },
+    onClosed: () => {
+      const u = userRef.current;
+      if (!u) return;
+      setSyncing(true);
+      setTimeout(() => reconcile(u.ads_today), 3000);
+    },
+  });
 
   if (!user) return <View style={styles.root} />;
-  const premium = user.tier === "premium";
-  const capped = user.ads_today >= user.ads_cap;
+  const premium = isSubscribed;
+  const cap = premium ? CAP_PREMIUM : CAP_FREE;
+  const capped = user.ads_today >= cap;
+  const isAdmin = user.role === "admin";
+  const canSimulate = !realAd.available && isAdmin;
+  const adReady = realAd.available ? realAd.loaded : canSimulate;
 
-  // "Ad Watched Successfully" listener
+  // Simulated "Ad Watched Successfully" listener (admin test mode only)
   const onAdWatched = async () => {
     setAdOpen(false);
     const { userShare } = splitRevenue(user.ad_payout);
@@ -49,18 +96,15 @@ export default function Dashboard() {
     }
   };
 
-  const togglePremium = async () => {
-    setUpgrading(true);
-    try {
-      const fresh = await api<User>("/premium/toggle", { method: "POST" });
-      setUser(fresh);
-      toast("success", fresh.tier === "premium" ? "Premium active — 75 ads per day unlocked" : "Switched to Free tier");
-    } catch (e: any) {
-      toast("error", e?.message ?? "Upgrade failed");
-    } finally {
-      setUpgrading(false);
-    }
-  };
+  const watchTitle = capped
+    ? "Daily Limit Reached"
+    : realAd.available
+      ? realAd.loaded
+        ? "Watch Ad & Earn"
+        : "Loading Ad…"
+      : canSimulate
+        ? "Watch Ad & Earn (Test)"
+        : "Ads in Android App Only";
 
   return (
     <View style={styles.root} testID="dashboard-screen">
@@ -81,15 +125,16 @@ export default function Dashboard() {
         <Animated.View entering={FadeInDown.delay(120).duration(500)} style={styles.action}>
           <GoldButton
             testID="watch-ad-button"
-            title={capped ? "Daily Limit Reached" : "Watch Ad & Earn"}
-            onPress={() => setAdOpen(true)}
-            disabled={capped}
+            title={watchTitle}
+            onPress={() => (realAd.available ? realAd.show() : setAdOpen(true))}
+            disabled={capped || !adReady}
             loading={syncing}
             large
           />
           <Text testID="ads-today-text" style={styles.micro}>
-            Ads Today: {user.ads_today} / {user.ads_cap}
+            Ads Today: {Math.min(user.ads_today, cap)} / {cap}
           </Text>
+          {canSimulate ? <Text style={styles.note}>Admin test mode — simulated ad (preview only).</Text> : null}
         </Animated.View>
 
         {!premium ? (
@@ -98,14 +143,13 @@ export default function Dashboard() {
               testID="upgrade-premium-button"
               variant="ghost"
               title="Upgrade to Premium ($5/mo)"
-              onPress={togglePremium}
-              loading={upgrading}
+              onPress={() => router.push("/premium")}
             />
-            <Text style={styles.note}>Demo mode — no charge. 75 ads per day.</Text>
+            <Text style={styles.note}>75 ads per day · Billed via Google Play</Text>
           </Animated.View>
         ) : (
-          <Pressable testID="downgrade-free-button" onPress={togglePremium} style={styles.link}>
-            <Text style={styles.linkText}>Switch back to Free (demo)</Text>
+          <Pressable testID="manage-premium-link" onPress={() => router.push("/premium")} style={styles.link}>
+            <Text style={styles.linkText}>Manage Premium</Text>
           </Pressable>
         )}
 

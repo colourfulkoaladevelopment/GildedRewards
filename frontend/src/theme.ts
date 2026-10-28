@@ -37,7 +37,8 @@ const dark = {
   border: "#332A0D",
   borderStrong: "#D4AF37",
   divider: "#1A1A1A",
-  scrim: "rgba(0,0,0,0.92)",
+  scrim: "#000000",
+  dim: "rgba(0,0,0,0.6)",
 };
 
 export type ThemeColors = typeof dark;
@@ -72,7 +73,8 @@ const light: ThemeColors = {
   border: "#E6D9AE",
   borderStrong: "#D4AF37",
   divider: "#EEE8D6",
-  scrim: "rgba(0,0,0,0.92)",
+  scrim: "#000000",
+  dim: "rgba(0,0,0,0.6)",
 };
 
 export const defaultScheme = "dark" satisfies ColorScheme;

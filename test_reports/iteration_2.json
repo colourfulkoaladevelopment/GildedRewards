@@ -1,0 +1,48 @@
+{
+  "summary": "Iteration 2 (AdMob SSV + RevenueCat). Backend 27/27 pytest pass (admin-only /ads/reward 403/200/429-gap, /ads/session, SSV bad-signature 400 x5, /me shape w/o tier + ads_max 75, /premium/toggle 404/405, auth/cashout<$5/transactions regression). Frontend: demo dashboard correct (Free Tier, disabled 'Ads Available in the Android App', 0/30); admin simulated ad overlay countdown -> Claim -> $0.12 -> $0.16, 3/30 -> 4/30, toast OK; Restore Purchases works ('No active subscription found'); legal, login, cashout disabled button, theme toggle OK. BLOCKER: RevenueCat purchase flow cannot be completed - premium screen stuck on 'Linking your account…' and Subscribe button permanently disabled (identityReady always false). Price shows $9.99/month, not expected $5.00. Confirm modal / Test Store purchase / Premium badge / cap 75 NOT verifiable because of blocker. Deprecated API detected: expo-router/unstable-native-tabs.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/admob/ssv", "issue": "Server only enforces 75/day ceiling; free-tier 30 cap is client-side only (tier from RevenueCat on device). A modified client could earn 75 real ads/day as free user. Consider RevenueCat webhook/REST entitlement check server-side since payouts are real money."},
+      {"endpoint": "GET /api/admob/ssv", "issue": "Unknown key_id forces a re-fetch of Google verifier keys on every request (server.py:242-243) - outbound request amplification for unauthenticated callers; throttle forced refresh (e.g. once per minute)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Premium paywall Subscribe", "issue": "Subscribe button permanently disabled; 'Linking your account…' never clears. RevenueCat POST /v1/subscribers/identify returns 200 but subscriber.original_app_user_id stays '$RCAnonymousID:…' (RC keeps the first-seen ID as original after aliasing). identityReady (revenuecat.tsx:96-97) and purchaseMutation guard (revenuecat.tsx:85-86) both test originalAppUserId.startsWith('$RCAnonymousID:'), so they are always false/throw. Reproduced for a fresh user and for admin, with and without page reload.", "testID": "premium-subscribe-button", "priority": "CRITICAL"},
+      {"component": "Premium price", "issue": "Offering price from RevenueCat Test Store shows '$9.99 / month' and 'Subscribe · $9.99/mo', but dashboard button says 'Upgrade to Premium ($5/mo)' and spec expects $5.00. Product pro.monthly price in RevenueCat Test Store must be set to $5.00 (or dashboard label should use offering price).", "testID": "premium-price", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Upgrade -> Subscribe -> Confirm -> Premium Member badge / cap 75", "issue": "Not testable: blocked at disabled Subscribe button (see ui_bugs). premium-confirm-modal never shown.", "affected_testIDs": ["premium-subscribe-button", "premium-confirm-modal", "premium-confirm-button", "tier-badge", "ads-today-text", "manage-premium-link"]}
+    ],
+    "design_issues": [
+      {"screen": "Dashboard (non-admin)", "issues": ["Disabled watch button label 'Ads Available in the Android App' wraps to 2 lines and is left-aligned, low-contrast grey on pale gold"]},
+      {"screen": "AdOverlay", "issues": ["Scrim is semi-transparent; dashboard text ('Watch Ad & Earn (Test)', balance) shows through behind countdown - overlay should be opaque"]},
+      {"screen": "Premium", "issues": ["Once after page reload, dev error toast 'Failed to load font Ionicons Network…' appeared and icons rendered as tofu boxes (intermittent font load timeout)"]}
+    ],
+    "react_native_issues": [
+      {"component": "expo-router/unstable-native-tabs", "issue": "Console warns `expo-router/unstable-native-tabs` is deprecated; use `expo-router/native-tabs`. Reference: /app/frontend/app/(tabs)/_layout.tsx:3"}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_luxe_api.py", "/app/test_reports/pytest/pytest_results_iter2.xml"],
+  "action_items": [
+    "CRITICAL: Fix RevenueCat identity check in /app/frontend/src/revenuecat.tsx - do not use customerInfo.originalAppUserId. Track a linked state set after Purchases.logIn(user.id) resolves (e.g. useState linkedId; identityReady = linkedId === user?.id) and in purchaseMutation use `await Purchases.isAnonymous()` or `await Purchases.getAppUserID() === user.id` instead of originalAppUserId.",
+    "HIGH: Set RevenueCat Test Store product pro.monthly price to $5.00 (currently $9.99) so paywall matches 'Upgrade to Premium ($5/mo)'.",
+    "After fix, retest: Subscribe -> confirm modal -> Confirm -> back on dashboard 'Premium Member', 'Ads Today: x / 75', upgrade button hidden, manage-premium-link visible.",
+    "Replace `expo-router/unstable-native-tabs` import with `expo-router/native-tabs` in app/(tabs)/_layout.tsx.",
+    "Optional: enforce free-tier 30 cap server-side for SSV credits (RevenueCat webhook/REST); throttle forced Google key refresh in admob_key()."
+  ],
+  "critical_code_review_comments": [
+    "revenuecat.tsx:85-86 & 96-97: originalAppUserId is the FIRST id ever seen by RC; after logIn aliasing it remains $RCAnonymousID:… -> purchase permanently blocked.",
+    "Tier/cap is computed only on client from RC entitlement; server has no notion of premium, so 30-cap is not enforced for real-money SSV credits.",
+    "server.py:242-243 forced key refresh on unknown key_id is unauthenticated-triggerable.",
+    "User model still carries unused `tier` field (server.py:86) - harmless, public_user excludes it."
+  ],
+  "updated_files": ["/app/backend/tests/test_luxe_api.py"],
+  "success_rate": {"backend": "100% (27/27)", "frontend": "~70% (demo dashboard, admin simulated ad, restore, legal, login, cashout, theme pass; RevenueCat purchase flow blocked; price mismatch)"},
+  "seed_data_creation": "Registered temporary test_*@example.com users (deleted afterwards). Admin balance moved $0.12 -> $0.16 via 2 simulated ads (pytest + UI). Demo untouched at $0.00.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "PayPal LIVE: keep balances < $5. Admin balance now $0.16, ads_today 4. pytest: export EXPO_PUBLIC_BACKEND_URL from frontend/.env; pytest.ini uses xdist. Editing files in backend/tests triggers backend reload (wait ~4s). To test purchase, use a fresh registered user so demo stays Free. RC web logs: POST api.revenuecat.com/v1/subscribers/identify returns original_app_user_id=$RCAnonymousID:...",
+  "rca_of_issue": "Repro: login any user -> Upgrade -> premium screen shows 'Linking your account…' forever, Subscribe aria-disabled=true. Network: identify 200 with subscriber.original_app_user_id='$RCAnonymousID:fa71…'. Root cause: identityReady derived from originalAppUserId which RevenueCat never changes after aliasing an anonymous user to a custom app user id. Mitigation: base identity readiness on the result of logIn / Purchases.getAppUserID() / Purchases.isAnonymous()."
+}

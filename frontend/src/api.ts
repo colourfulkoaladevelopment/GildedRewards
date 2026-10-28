@@ -9,9 +9,8 @@ export type User = {
   role: string;
   balance: number;
   paypal_email: string | null;
-  tier: "free" | "premium";
   ads_today: number;
-  ads_cap: number;
+  ads_max: number;
   min_cashout: number;
   ad_payout: number;
 };
